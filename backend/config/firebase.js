@@ -2,9 +2,15 @@ const admin = require('firebase-admin');
 
 // Note: Pour une utilisation réelle, téléchargez votre fichier serviceAccountKey.json 
 // depuis la console Firebase (Paramètres du projet > Comptes de service)
-const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_PATH
-    ? require(process.env.FIREBASE_SERVICE_ACCOUNT_PATH)
-    : null;
+let serviceAccount = null;
+
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    // Si la clé est passée directement sous forme de texte JSON (Idéal pour Render.com)
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+} else if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
+    // Si on utilise un fichier en local
+    serviceAccount = require(process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
+}
 
 if (serviceAccount) {
     admin.initializeApp({
