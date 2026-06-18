@@ -43,26 +43,40 @@ router.get('/teams', authenticate, async (req, res) => {
 // Créer un utilisateur via Firebase Admin SDK (pas de déconnexion de l'admin)
 router.post('/users', authenticate, async (req, res) => {
     try {
-        const { email, password, name, role, departmentId, photo, descriptor } = req.body;
+        const { email, password, name, role, departmentId, scheduleId, photo, descriptor } = req.body;
 
         if (!email || !password) {
             return res.status(400).json({ error: 'Email et mot de passe requis.' });
         }
 
-        // Créer le compte dans Firebase Auth via Admin SDK
-        const userRecord = await auth.createUser({
-            email,
-            password,
-            displayName: name || '',
-        });
+        let userRecord;
+        try {
+            // Créer le compte dans Firebase Auth via Admin SDK
+            userRecord = await auth.createUser({
+                email,
+                password,
+                displayName: name || '',
+            });
+        } catch (authError) {
+            if (authError.code === 'auth/email-already-exists') {
+                // Email orphelin dans Auth (compte supprimé de Firestore mais pas de Auth)
+                // On récupère l'UID existant et on met à jour le mot de passe
+                console.log(`Email orphelin détecté: ${email} — récupération UID existant...`);
+                userRecord = await auth.getUserByEmail(email);
+                await auth.updateUser(userRecord.uid, { password, displayName: name || '' });
+            } else {
+                throw authError;
+            }
+        }
 
-        // Sauvegarder les données dans Firestore
+        // Sauvegarder/Écraser les données dans Firestore
         await db.collection('users').doc(userRecord.uid).set({
             uid: userRecord.uid,
             email,
             name: name || '',
             role: role || 'employee',
             departmentId: departmentId || '',
+            scheduleId: scheduleId || '',
             photo: photo || null,
             descriptor: descriptor || null,
             createdAt: new Date().toISOString(),
@@ -71,9 +85,6 @@ router.post('/users', authenticate, async (req, res) => {
         res.status(201).json({ uid: userRecord.uid, email, name });
     } catch (e) {
         console.error("Erreur création utilisateur:", e);
-        if (e.code === 'auth/email-already-exists') {
-            return res.status(409).json({ error: 'Cet email est déjà utilisé.' });
-        }
         res.status(500).json({ error: e.message });
     }
 });
